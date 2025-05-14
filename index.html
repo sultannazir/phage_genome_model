@@ -1,0 +1,149 @@
+<html>
+<script src="./cacatoo.js"></script> <!-- Include cacatoo library (compiled with rollup) -->
+<script src="./lib/all.js"></script> <!-- Include other libraries (concattenated in 1 file) -->
+<script src="./genome_classes.js"></script>
+<link rel="stylesheet" href="./style/cacatoo.css"> <!-- Set style sheet -->
+
+<script>
+    /*-----------------------Start user-defined code ---------------------*/
+
+    let sim;
+
+    // Parameters
+    let init_vir = 5
+    let num_start_cells = 10
+    let init_nc = 20
+    let b0 = 0.5
+    let seg_cost = 0.0005
+
+    let gene_deletion_rate = 0.0001
+    let gene_duplication_rate = 0.0001
+    let gene_inactivation_rate = 0.0001
+    let phage_deletion_rate = 0.0001
+    let phage_duplication_rate = 0.0001
+    let gene_regulation_mutation_rate = 0.0001
+    let lysis_mutation_rate = 0.0001
+    let coevolution_rate = 0.001
+    let coevolution_step = 0.01
+    let virion_decay_rate = 0.001
+
+    let X_half = 0.5
+
+    var size = 120
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    function cacatoo() {
+
+        // Configuration
+        let config = {
+            title: "Evolution of prophage genome",
+            description: "Virtual experiment of genome evolution in a bacteria-prophage system",
+            maxtime: 1000000,
+            seed: 1,
+            skip: 0,
+            ncol: size,
+            nrow: size,		            // dimensions of the grid to build
+            wrap: [true, true],       // Wrap boundary [COLS, ROWS]
+            graph_interval: 1,
+            fpsmeter: false
+        }
+
+        let flockconfig = {
+          // Flock parameters
+          num_boids: 0,            // Starting number of boids (flocking individuals)
+          shape: 'dot',            // Shape of the boids drawn (options: bird, arrow, line, rect, dot, ant)
+          click: 'repel',          // Clicking the boids pushes them away from the mouse
+          max_speed: 1.0,          // Maximum velocity of boids
+          max_force: 1.0,          // Maximum steering force applied to boids (separation/cohesion/alignment rules)
+          init_velocity:0,
+          friction: 0.1,           // Them ants are darn slippery :)
+          brownian: 0.05,
+          // Mouse parameters
+          mouse_radius: 20,        // Radius of boids captured by the mouse overlay
+          draw_mouse_radius: 'true',    // Show a circle where the mouse is
+          draw_mouse_colour: 'white',
+          // Collision behaviour
+          collision_force: 1.0,
+		      cohesion: {strength:0.5, radius: 4.5},
+          size: 3,                // Size of the boids (scales drawing and colision detection)
+
+          // Optimalisation (speed) parameters
+          //qt_colour: "white",       // Show quadtree (optimalisation by automatically tessalating the space)
+          qt_capacity: 3,        // How many boids can be in one subspace of the quadtree before it is divided further
+        }
+
+        sim = new Simulation(config)
+
+        sim.makeGridmodel("environment");
+
+        sim.initialGrid(sim.environment, "X", 0, 1)
+        for (let x = 0; x < sim.ncol; x++) {
+          for (let y = 0; y < sim.nrow; y++) {
+            sim.environment.grid[x][y].X = x/size
+            sim.environment.grid[x][y].virions = []
+            for (let i = 0; i < init_vir; i++) sim.environment.grid[x][y].virions.push(new Virion())
+          }
+        }
+
+        sim.createDisplay_continuous({
+          model: "environment",
+          property: "X",
+		      minval: 0.0, maxval: 1.0,
+		      num_colours: 100, decimals: 2,
+          legend: true,
+		      legendlabel: "X concentration",
+		      n_ticks: 2,
+		      fill: "viridis",
+          label: "Bacteria"
+        })
+
+        sim.makeFlockmodel("flock", flockconfig)
+        sim.flock.boids = []
+        sim.flock.populateSpot(num_start_cells,sim.nr/2,sim.nc/2)
+
+        for (let boid of sim.flock.boids) {
+          boid.property = 10
+        }
+
+        console.log(sim.flock.boids)
+
+        sim.createFlockDisplay("flock", {
+          legend: true,
+          property: "property",
+          fill: "inferno",
+          addToDisplay: sim.canvases[0],
+          legendlabel: "property",
+          strokeStyle: "white",
+          strokeWidth: 0.5,
+          minval: 0, maxval: 10, num_colours: 200, nticks: 3, decimals: 2
+        })
+
+
+        sim.steps = 0
+
+      }
+        /*-------------------------End user-defined code ---------------------*/
+</script>
+
+<body onload="cacatoo()">
+    <div class="header" id="header">
+        <h2>Cacatoo</h2>
+    </div>
+    <div class="content" id="movie">
+    <div class="content" id="canvas_holder">
+        <center>
+            <div style="width:40%;">
+        </center>
+    </div>
+    <div class="content" id="graph_holder"> </div>
+    </div>
+    <div class="content" id="form_holder"></div>
+    <!-- <figure>
+      <div class="figure-title">Model overview</div>
+      <img src="model.png" alt="Model illustration" width="800">
+      <figcaption>(A) Phage lifecycle (B) Genotype space - each grid point is coloured based on the genotype of the cell and black for empty space (C) Expression of cooperative trait with privatisation (D) Mutations </figcaption>
+    </figure> -->
+    <div class="footer" id="footer"></div>
+</body>
+
+</html>
