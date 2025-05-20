@@ -12,11 +12,12 @@
     let speed = 1
     // Parameters
     let init_vir = 5
-    let num_start_cells = 1000
+    let num_start_cells = 100
+    let max_cells = 10000
     let init_nc = 20
     let init_att = 3
-    let b0 = 0.004
-    let seg_cost = 0.0001
+    let b0 = 0.015
+    let seg_cost = 0.0002
 
     let X_uptake = 0.1
     let Y_uptake = 0.1
@@ -25,22 +26,23 @@
     let X_decay = 0.01
     let Y_decay = 0.01
 
-    let d0 = 0.001
+    let d0 = 0.0025
 
-    let gene_deletion_rate = 0.01
-    let gene_duplication_rate = 0.01
+    let gene_deletion_rate = 0.001
+    let gene_duplication_rate = 0.001
     let gene_inactivation_rate = 0.01
-    let phage_deletion_rate = 0.01
-    let phage_duplication_rate = 0.01
+    let phage_deletion_rate = 0.001
+    let phage_duplication_rate = 0.001
     let gene_regulation_mutation_rate = 0.01
     let lysis_mutation_rate = 0.01
     let coevolution_rate = 0.01
     let coevolution_step = 0.01
+    let att_emergence_rate = 0.005
 
     let specificity = 10
     let virion_decay_rate = 0.001
-    let infection_rate = 0.1
-    let virion_diffusion_rate = 0.05
+    let infection_rate = 1
+    let virion_diffusion_rate = 0.01
 
     let virion_influx_time = 5000
     let bacteria_influx_rate = 0.001
@@ -158,8 +160,8 @@
 
         for (let boid of sim.flock.boids) {
           boid.genome = new Genome(init_nc, b0, seg_cost)
-          boid.lock = boid.genome.first_lock
-          boid.lysogen = false
+          boid.lock = boid.genome.lock
+          boid.lysis = boid.genome.lysis
           boid.susceptible = !!boid.genome.susceptible
           boid.X = 0.0
           boid.Y = 0.0
@@ -218,8 +220,9 @@
                             integration = true
                             boid.genome.chromosome.splice(gnum, 1)
                             boid.genome.phages.push(sim.environment.grid[x][y].virions[vir].genome)
-                            boid.lysogen = true
                             boid.genome.calculate_fitness()
+                            boid.lock = boid.genome.lock
+                            boid.lysis = boid.genome.lysis
                             boid.susceptible = !!boid.genome.susceptible
                           }
                         }
@@ -264,13 +267,15 @@
                 }
               }
               // birth
-              if (sim.rng.random() < boid.genome.fitness*boid.Y) {
+              if (this.boids.length < max_cells && sim.rng.random() < boid.genome.fitness*boid.Y) {
                 let newboid = this.copyBoid(boid);
                 let angle = sim.rng.random() * Math.PI * 2;
                 newboid.position.x += 0.5 * boid.size * Math.cos(angle);
                 newboid.position.y += 0.5 * boid.size * Math.sin(angle);
                 newboid.genome = boid.genome.copy()
-                newboid.lock = newboid.genome.first_lock
+                newboid.lock = newboid.genome.lock
+                newboid.lysis = newboid.genome.lysis
+                newboid.susceptible = !!newboid.genome.susceptible
                 newboid.X /= 2
                 boid.X /= 2
                 newboid.Y /= 2
@@ -292,7 +297,7 @@
 
         sim.environment.nextState = function(x, y) {
           this.grid[x][y].X += X_max_influx * x/size
-          this.grid[x][y].Y += Y_max_influx * (1-0.5*y/size)
+          this.grid[x][y].Y += Y_max_influx * y/size
           this.grid[x][y].X *= 1 - X_decay
           this.grid[x][y].Y *= 1 - Y_decay
 
@@ -334,8 +339,8 @@
                     size: sim.flock.config.size
             }
             new_boid.genome = new Genome(init_nc, b0, seg_cost)
-            new_boid.lock = new_boid.genome.first_lock
-            new_boid.lysogen = false
+            new_boid.lock = new_boid.genome.lock
+            new_boid.lysis = new_boid.genome.lysis
             new_boid.susceptible = !!new_boid.genome.susceptible
             new_boid.X = 0.0
             new_boid.Y = 0.0

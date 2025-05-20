@@ -6,12 +6,12 @@ class Genome {
     this.chromosome = []
     for (let i = 0; i < init_att; i++)this.chromosome.push(new Gene("att"))
     for (let i = 0; i < init_nc; i++) this.chromosome.push(new Gene("."))
-    this.first_lock = this.chromosome[0].lock
+    this.lock = this.chromosome[0].lock
+    this.lysis = -1
     this.dupSites = Array(this.chromosome.length).fill(0)
     this.phages = []
     this.genome_length = this.chromosome.length
     this.fitness = b0 - this.genome_length*seg_cost
-
     this.susceptible = 1
   }
 
@@ -24,12 +24,7 @@ class Genome {
       child.phages.push([])
       for (let j = 0; j < this.phages[i].length; j++) child.phages[i].push(this.phages[i][j].copy())
     }
-    child.first_lock = this.first_lock
-    child.genome_length = this.genome_length
-    child.dupSites = this.dupSites
-    child.fitness = this.fitness
-    child.susceptible = this.susceptible
-
+    child.calculate_fitness()
     child.mutate()
 
     return child
@@ -37,26 +32,24 @@ class Genome {
 
   calculate_fitness() {
     this.susceptible = 0
+    this.lysis = -1
+    this.lock = -1
     for (let i = 0; i < this.chromosome.length; i++){
       if (this.chromosome[i].type == "att"){
         this.susceptible = 1
-        this.first_lock = this.chromosome[i].lock
+        this.lock = this.chromosome[i].lock
       }
     }
-    if (this.susceptible == 0) {
-      this.fitness = 0
-      this.first_lock = -1
+    this.genome_length = this.chromosome.length
+    this.dupSites = Array(this.chromosome.length).fill(0)
+    for (let i = 0; i < this.phages.length; i++){
+      this.genome_length = this.genome_length + this.phages[i].length
+      this.dupSites.push(0)
+      this.dupSites.concat(Array(this.phages[i].length+1).fill(i+1))
+      if (this.phages[i].length > 0 && this.phages[i][0].type == "L") this.lysis = this.phages[i][0].key
     }
-    else{
-      this.genome_length = this.chromosome.length
-      this.dupSites = Array(this.chromosome.length).fill(0)
-      for (let i = 0; i < this.phages.length; i++){
-        this.genome_length = this.genome_length + this.phages[i].length
-        this.dupSites.push(0)
-        this.dupSites.concat(Array(this.phages[i].length+1).fill(i+1))
-      }
-      this.fitness = b0 - this.genome_length*seg_cost
-    }
+    this.fitness = b0 - this.genome_length*seg_cost
+
   }
 
   mutate() {
@@ -84,11 +77,11 @@ class Genome {
     for (let i = 0; i < this.phages.length; i++){
       for (let j = 0; j < this.phages[i].length; j++){
         var randomnr = sim.rng.genrand_real1()
-        if (randomnr < gene_deletion_rate) {
+        if (this.phages[i][j].type != "L" && randomnr < gene_deletion_rate) {
           this.phages[i].splice(j, 1)
           mutation = true
         }
-        else if (randomnr < gene_deletion_rate + gene_inactivation_rate) {
+        else if (this.phages[i][j].type != "L" && randomnr < gene_deletion_rate + gene_inactivation_rate) {
           this.phages[i][j].type = "."
           mutation = true
         }
@@ -177,6 +170,13 @@ class Gene {
       else {
         new_gene.lowX_state = this.lowX_state
         new_gene.highX_state = this.highX_state
+      }
+    }
+
+    else if (this.type == ".") {
+      if (sim.rng.genrand_real1() < att_emergence_rate) {
+        this.type = "att"
+        this.lock = sim.rng.genrand_real1()
       }
     }
     return new_gene
