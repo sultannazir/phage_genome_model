@@ -1,13 +1,12 @@
 class Genome {
 
-  constructor(init_nc, b0, seg_cost) {
+  constructor() {
     this.uid = genomeIds.next()
-    //initialise a genome with init_nc many non-coding segments and one attachment region
     this.chromosome = []
-    for (let i = 0; i < init_att; i++)this.chromosome.push(new Gene("att"))
-    for (let i = 0; i < init_nc; i++) this.chromosome.push(new Gene("."))
-    this.lock = this.chromosome[0].lock
-    this.lysis = -1
+    shuffle(hk_genes)
+    for (let i = 0; i < init_hk; i++)this.chromosome.push(new Gene(hk_genes[i%hk_genes.length]))
+    for (let i = 0; i < init_nc; i++) this.chromosome.push(new Gene('.'))
+    shuffle(this.chromosome)
     this.dupSites = Array(this.chromosome.length).fill(0)
     this.phages = []
     this.genome_length = this.chromosome.length
@@ -31,14 +30,12 @@ class Genome {
   }
 
   calculate_fitness() {
-    this.susceptible = 0
-    this.lysis = -1
-    this.lock = -1
+    this.fitness = 1
+    let check = JSON.parse(JSON.stringify(hk_genes))
+
     for (let i = 0; i < this.chromosome.length; i++){
-      if (this.chromosome[i].type == "att"){
-        this.susceptible = 1
-        this.lock = this.chromosome[i].lock
-      }
+      var idx = check.indexOf(this.chromosome[i].type)
+      if (idx >= 0) check.splice(idx, 1)
     }
     this.genome_length = this.chromosome.length
     this.dupSites = Array(this.chromosome.length).fill(0)
@@ -46,65 +43,58 @@ class Genome {
       this.genome_length = this.genome_length + this.phages[i].length
       this.dupSites.push(0)
       this.dupSites.concat(Array(this.phages[i].length+1).fill(i+1))
-      if (this.phages[i].length > 0 && this.phages[i][0].type == "L") this.lysis = this.phages[i][0].key
+      for (let j = 0; j < this.phages[i].length; j++) {
+        var idx = check.indexOf(this.phages[i][j].type)
+        if (idx >= 0) check.splice(idx, 1)
+      }
     }
-    this.fitness = b0 - this.genome_length*seg_cost
+
+    if (check.length == 0 && this.susceptible == 1) this.fitness = b0 - this.genome_length*seg_cost
+    else this.fitness = 0
 
   }
 
   mutate() {
-    var mutation = false
-    var frac = (this.chromosome.length + this.phages.length)/this.num_dupSites
     for (let i = 0; i < this.chromosome.length; i++){
       var randomnr = sim.rng.genrand_real1()
       if (randomnr < gene_deletion_rate) {
         this.chromosome.splice(i, 1)
-        mutation = true
       }
       else if (randomnr < gene_deletion_rate + gene_inactivation_rate) {
         this.chromosome[i].type = "."
-        mutation = true
       }
       else if (randomnr < gene_deletion_rate + gene_inactivation_rate + gene_duplication_rate) {
-        // att has a lower
         var insertion = sim.rng.genrand_int(0,this.dupSites.length-1)
         if (this.dupSites[insertion] == 0) this.chromosome.push(this.chromosome[i].copy())
-        else if (this.chromosome[i].type != "att") this.phages[this.dupSites[insertion]-1].push(this.chromosome[i].copy())
-        mutation = true
+        else this.phages[this.dupSites[insertion]-1].push(this.chromosome[i].copy())
       }
     }
-    var frac = (this.chromosome.length + this.phages.length)/this.num_dupSites
     for (let i = 0; i < this.phages.length; i++){
       for (let j = 0; j < this.phages[i].length; j++){
         var randomnr = sim.rng.genrand_real1()
         if (this.phages[i][j].type != "L" && randomnr < gene_deletion_rate) {
           this.phages[i].splice(j, 1)
-          mutation = true
         }
         else if (this.phages[i][j].type != "L" && randomnr < gene_deletion_rate + gene_inactivation_rate) {
           this.phages[i][j].type = "."
-          mutation = true
         }
-        else if (this.phages[i][j].type != "L" && randomnr < gene_deletion_rate + gene_inactivation_rate + gene_duplication_rate*frac) {
+        else if (this.phages[i][j].type != "L" && randomnr < gene_deletion_rate + gene_inactivation_rate + gene_duplication_rate) {
           var insertion = sim.rng.genrand_int(0,this.dupSites.length-1)
           if (this.dupSites[insertion] == 0) this.chromosome.push(this.phages[i][j].copy())
           else this.phages[this.dupSites[insertion]-1].push(this.phages[i][j].copy())
-          mutation = true
         }
       }
       var randomnr = sim.rng.genrand_real1()
       if (randomnr < phage_deletion_rate){
         this.phages.splice(i, 1)
-        mutation = true
       }
-      else if (randomnr < phage_duplication_rate){
+      else if (randomnr < phage_deletion_rate + phage_duplication_rate){
         let new_phage = []
-        for (j = 0; j < this.phages[i].length; j++) new_phage.push(this.phages[i][j].copy())
+        for (let j = 0; j < this.phages[i].length; j++) new_phage.push(this.phages[i][j].copy())
         this.phages.push(new_phage)
-        mutation = true
       }
     }
-    if (mutation) this.calculate_fitness()
+    this.calculate_fitness()
   }
 
 }
@@ -112,7 +102,6 @@ class Genome {
 class Virion {
 
   constructor(type, parent) {
-    this.uid = virionIds.next()
     this.genome = []
     if (type) {
       this.genome.push(new Gene("L"))
@@ -125,14 +114,17 @@ class Virion {
 class Gene {
 
   constructor(type) {
-    this.uid = geneIds.next()
     this.type = type
-    if (type == "att") this.lock = sim.rng.genrand_real1()
+    if (['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'R', '.'].includes(type)) {
+      this.lock = []
+      for (let i = 0; i < bit_string_length; i++) this.lock.push(Math.floor(sim.rng.genrand_real1()*2))
+    }
     else if (type == "L") {
-      this.key = sim.rng.genrand_real1()
+      this.key = []
+      for (let i = 0; i < bit_string_length; i++) this.key.push(Math.floor(sim.rng.genrand_real1()*2))
       this.lysis = sim.rng.genrand_real1() * max_induction_rate
     }
-    else if (type == "R") {
+    if (type == "R") {
       this.highX_state = 1
       this.lowX_state = 1
     }
@@ -141,23 +133,26 @@ class Gene {
   copy() {
     let new_gene = new Gene(this.type)
 
-    if (this.type == "att") {
-      var rnr = sim.rng.genrand_real1()
-      if (rnr < coevolution_rate) new_gene.lock = ((this.lock + coevolution_step*(sim.rng.genrand_real1()*2-1)) + 1) % 1
-      else new_gene.lock = this.lock
+    if (['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'R', '.'].includes(this.type)) {
+      new_gene.lock = []
+      for(let i = 0; i < bit_string_length; i++) {
+        if (sim.rng.genrand_real1() < coevolution_rate) new_gene.lock.push(1 - this.lock[i])
+        else new_gene.lock.push(this.lock[i])
+      }
     }
 
     else if (this.type == "L") {
-      var rnr1 = sim.rng.genrand_real1()
-      if (rnr1 < coevolution_rate) new_gene.key = ((this.key + coevolution_step*(sim.rng.genrand_real1()*2-1)) + 1) % 1
-      else new_gene.key = this.key
+      new_gene.key = []
+      for(let i = 0; i < bit_string_length; i++) {
+        if (sim.rng.genrand_real1() < coevolution_rate) new_gene.key.push(1 - this.key[i])
+        else new_gene.key.push(this.key[i])
+      }
 
-      var rnr2 = sim.rng.genrand_real1()
-      if (rnr2 < lysis_mutation_rate) new_gene.lysis = sim.rng.genrand_real1() * max_induction_rate
+      if (sim.rng.genrand_real1() < lysis_mutation_rate) new_gene.lysis = sim.rng.genrand_real1() * max_induction_rate
       else new_gene.lysis = this.lysis
     }
 
-    else if (this.type == "R") {
+    if (this.type == "R") {
       var rnr = sim.rng.genrand_real1()
       if (rnr < 0.5*gene_regulation_mutation_rate) {
         new_gene.lowX_state = this.lowX_state
@@ -173,12 +168,6 @@ class Gene {
       }
     }
 
-    else if (this.type == ".") {
-      if (sim.rng.genrand_real1() < att_emergence_rate) {
-        this.type = "att"
-        this.lock = sim.rng.genrand_real1()
-      }
-    }
     return new_gene
   }
 
@@ -206,5 +195,3 @@ function* idGenerator() {
 }
 
 const genomeIds = idGenerator()
-const virionIds = idGenerator()
-const geneIds = idGenerator()
