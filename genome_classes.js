@@ -122,7 +122,7 @@ class Gene {
     else if (type == "L") {
       this.key = []
       for (let i = 0; i < bit_string_length; i++) this.key.push(Math.floor(sim.rng.genrand_real1()*2))
-      this.lysis = sim.rng.genrand_real1() * max_induction_rate
+      this.lysis = sim.rng.genrand_real1() * max_induction_rate/10
     }
     if (type == "R") {
       this.highX_state = 1
@@ -147,8 +147,9 @@ class Gene {
         if (sim.rng.genrand_real1() < coevolution_rate) new_gene.key.push(1 - this.key[i])
         else new_gene.key.push(this.key[i])
       }
-
-      if (sim.rng.genrand_real1() < lysis_mutation_rate) new_gene.lysis = sim.rng.genrand_real1() * max_induction_rate
+      var rnr = sim.rng.genrand_real1()
+      if (rnr < lysis_mutation_rate/2) new_gene.lysis = Math.min(this.lysis * (1 + lysis_mutation_change), max_induction_rate)
+      else if (rnr < lysis_mutation_rate) new_gene.lysis = this.lysis * (1 - lysis_mutation_change)
       else new_gene.lysis = this.lysis
     }
 

@@ -34,8 +34,8 @@
     let phage_duplication_rate = 0.001
     let gene_regulation_mutation_rate = 0.01
     let lysis_mutation_rate = 0.01
+    let lysis_mutation_change = 0.1
     let coevolution_rate = 0.01
-    let coevolution_step = 0.01
 
     let bit_string_length = 20
 
@@ -44,7 +44,7 @@
     let infection_rate = 0.1
     let virion_diffusion_rate = 0.01
 
-    let bacteria_influx_rate = 0.00
+    let bacteria_influx_rate = 0.01
     let virion_influx_rate = 1
 
     let max_induction_rate = 0.1
@@ -173,7 +173,7 @@
           legendlabel: "Nutrient",
           strokeStyle: "black",
           strokeWidth: 0.5,
-          minval: -1, maxval: 1, num_colours: 200, nticks: 3, decimals: 2, scale:4
+          minval: 0, maxval: 1, num_colours: 200, nticks: 3, decimals: 2, scale:4
         })
 
         sim.steps = 0
@@ -201,9 +201,9 @@
               boid.Y *= 1 - Y_decay
 
               // infection
-              if (sim.environment.grid[x][y].density > 0) {
+              if (sim.environment.grid[x][y].virions.length > 0) {
                 shuffle(sim.environment.grid[x][y].virions)
-                for (let vir = 0; vir < sim.environment.grid[x][y].density; vir++) {
+                for (let vir = 0; vir < sim.environment.grid[x][y].virions.length; vir++) {
                   if (sim.rng.genrand_real1() < infection_rate) {
                     let integration = false
                     shuffle(boid.genome.chromosome)
@@ -222,7 +222,6 @@
                       }
                     }
                     sim.environment.grid[x][y].virions.splice(vir, 1)
-                    sim.environment.grid[x][y].density--
                   }
                 }
               }
@@ -249,7 +248,6 @@
                     for (let offnum = 1; offnum < burst_size - vir_cost*boid.genome.phages[phg].length; offnum++){
                       let new_virion = new Virion(false, boid.genome.phages[phg])
                       sim.environment.grid[x][y].virions.push(new_virion)
-                      sim.environment.grid[x][y].density++
                     }
                     death = true
                   }
@@ -298,9 +296,7 @@
             else if (rnr < virion_decay_rate + virion_diffusion_rate) {
               let nbr = this.randomMoore8(this, x, y)
               nbr.virions.push(this.grid[x][y].virions[vir])
-              nbr.density++
               this.grid[x][y].virions.splice(vir, 1)
-              this.grid[x][y].density--
             }
           }
         }
@@ -345,6 +341,7 @@
           let num_virions = 0
           for (let x = 0; x < sim.ncol; x++) {
             for (let y = 0; y < sim.nrow; y++) {
+              this.grid[x][y].density = this.grid[x][y].virions.length
               num_virions += this.grid[x][y].virions.length
             }
           }
@@ -356,7 +353,7 @@
           { },
           )
           this.plotArray(["Average lysis"],
-          [avg_lysis/num_Ls/max_induction_rate],
+          [avg_lysis/num_Ls],
           ["black"],
           "Evolution",
           { },

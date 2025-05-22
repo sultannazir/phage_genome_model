@@ -7,12 +7,11 @@ let VD = cmd_params.VD
 
 let speed = 1
 // Parameters
-let init_vir = 5
-let num_start_cells = 100
+let num_start_cells = 1000
 let max_cells = 10000
-let init_nc = 10
+let init_nc = 20
 let init_hk = 15
-let b0 = 0.01
+let b0 = 0.012
 let seg_cost = 0.0002
 
 let X_uptake = 0.1
@@ -31,15 +30,17 @@ let phage_deletion_rate = 0.001
 let phage_duplication_rate = 0.001
 let gene_regulation_mutation_rate = 0.01
 let lysis_mutation_rate = 0.01
+let lysis_mutation_change = 0.1
 let coevolution_rate = 0.01
-let coevolution_step = 0.01
-let att_emergence_rate = 0.005
+
+let bit_string_length = 20
 
 let specificity = 10
 let virion_decay_rate = 0.001
-let infection_rate = 1
+let infection_rate = 0.1
 let virion_diffusion_rate = 10**(-1*VD)
 
+let bacteria_influx_rate = 0.01
 let virion_influx_rate = 1
 
 let max_induction_rate = 0.1
@@ -94,7 +95,6 @@ class Genome {
 
   constructor() {
     this.uid = genomeIds.next()
-    //initialise a genome with init_nc many non-coding segments and one attachment region
     this.chromosome = []
     shuffle(hk_genes)
     for (let i = 0; i < init_hk; i++)this.chromosome.push(new Gene(hk_genes[i%hk_genes.length]))
@@ -104,7 +104,6 @@ class Genome {
     this.phages = []
     this.genome_length = this.chromosome.length
     this.fitness = b0 - this.genome_length*seg_cost
-    this.susceptible = 1
   }
 
   copy() {
@@ -123,14 +122,10 @@ class Genome {
   }
 
   calculate_fitness() {
-    this.susceptible = 0
     this.fitness = 1
     let check = JSON.parse(JSON.stringify(hk_genes))
 
     for (let i = 0; i < this.chromosome.length; i++){
-      if (this.chromosome[i].lock >= 0){
-        this.susceptible = 1
-      }
       var idx = check.indexOf(this.chromosome[i].type)
       if (idx >= 0) check.splice(idx, 1)
     }
@@ -141,7 +136,7 @@ class Genome {
       this.dupSites.push(0)
       this.dupSites.concat(Array(this.phages[i].length+1).fill(i+1))
       for (let j = 0; j < this.phages[i].length; j++) {
-        var idx = check.indexOf(this.chromosome[i].type)
+        var idx = check.indexOf(this.phages[i][j].type)
         if (idx >= 0) check.splice(idx, 1)
       }
     }
@@ -161,7 +156,6 @@ class Genome {
         this.chromosome[i].type = "."
       }
       else if (randomnr < gene_deletion_rate + gene_inactivation_rate + gene_duplication_rate) {
-        // att has a lower
         var insertion = sim.rng.genrand_int(0,this.dupSites.length-1)
         if (this.dupSites[insertion] == 0) this.chromosome.push(this.chromosome[i].copy())
         else this.phages[this.dupSites[insertion]-1].push(this.chromosome[i].copy())
@@ -213,19 +207,18 @@ class Gene {
 
   constructor(type) {
     this.type = type
-    if (['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', '.'].includes(type)) {
-        if (sim.rng.genrand_real1() < init_att_rate) this.lock = sim.rng.genrand_real1()
-        else this.lock = -1
+    if (['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'R', '.'].includes(type)) {
+      this.lock = []
+      for (let i = 0; i < bit_string_length; i++) this.lock.push(Math.floor(sim.rng.genrand_real1()*2))
     }
     else if (type == "L") {
-      this.key = sim.rng.genrand_real1()
-      this.lysis = sim.rng.genrand_real1() * max_induction_rate
+      this.key = []
+      for (let i = 0; i < bit_string_length; i++) this.key.push(Math.floor(sim.rng.genrand_real1()*2))
+      this.lysis = sim.rng.genrand_real1() * max_induction_rate/10
     }
-    else if (type == "R") {
-      this.highX_state = 0
+    if (type == "R") {
+      this.highX_state = 1
       this.lowX_state = 1
-      if (sim.rng.genrand_real1() < init_att_rate) this.lock = sim.rng.genrand_real1()
-      else this.lock = -1
     }
   }
 
@@ -233,23 +226,22 @@ class Gene {
     let new_gene = new Gene(this.type)
 
     if (['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'R', '.'].includes(this.type)) {
-      if (this.lock == -1) {
-        if (sim.rng.genrand_real1() < att_emergence_rate) this.lock = sim.rng.genrand_real1()
-        else new_gene.lock = -1
-      }
-      else {
-        if (sim.rng.genrand_real1() < coevolution_rate) new_gene.lock = ((this.lock + coevolution_step*(sim.rng.genrand_real1()*2-1)) + 1) % 1
-        else new_gene.lock = this.lock
+      new_gene.lock = []
+      for(let i = 0; i < bit_string_length; i++) {
+        if (sim.rng.genrand_real1() < coevolution_rate) new_gene.lock.push(1 - this.lock[i])
+        else new_gene.lock.push(this.lock[i])
       }
     }
 
     else if (this.type == "L") {
-      var rnr1 = sim.rng.genrand_real1()
-      if (rnr1 < coevolution_rate) new_gene.key = ((this.key + coevolution_step*(sim.rng.genrand_real1()*2-1)) + 1) % 1
-      else new_gene.key = this.key
-
-      var rnr2 = sim.rng.genrand_real1()
-      if (rnr2 < lysis_mutation_rate) new_gene.lysis = sim.rng.genrand_real1() * max_induction_rate
+      new_gene.key = []
+      for(let i = 0; i < bit_string_length; i++) {
+        if (sim.rng.genrand_real1() < coevolution_rate) new_gene.key.push(1 - this.key[i])
+        else new_gene.key.push(this.key[i])
+      }
+      var rnr = sim.rng.genrand_real1()
+      if (rnr < lysis_mutation_rate/2) new_gene.lysis = Math.min(this.lysis * (1 + lysis_mutation_change), max_induction_rate)
+      else if (rnr < lysis_mutation_rate) new_gene.lysis = this.lysis * (1 - lysis_mutation_change)
       else new_gene.lysis = this.lysis
     }
 
@@ -297,6 +289,7 @@ function* idGenerator() {
 
 const genomeIds = idGenerator()
 
+
 sim = new Simulation(config)
 
 sim.makeGridmodel("environment");
@@ -320,7 +313,6 @@ sim.flock.populateSpot(num_start_cells,sim.nr/2,sim.nc/2)
 
 for (let boid of sim.flock.boids) {
   boid.genome = new Genome()
-  boid.susceptible = !!boid.genome.susceptible
   boid.X = 0.0
   boid.Y = 0.0
 }
@@ -350,34 +342,31 @@ sim.flock.update = function() {
       boid.Y *= 1 - Y_decay
 
       // infection
-      if (boid.susceptible) {
-        if (sim.environment.grid[x][y].density > 0) {
-          shuffle(sim.environment.grid[x][y].virions)
-          for (let vir = 0; vir < sim.environment.grid[x][y].density; vir++) {
-            if (sim.rng.genrand_real1() < infection_rate) {
-              let integration = false
-              shuffle(boid.genome.chromosome)
-              for (let gnum = 0; gnum < boid.genome.chromosome.length && !integration; gnum++) {
-                if (boid.genome.chromosome[gnum].lock <= 0) {
-                  let key = sim.environment.grid[x][y].virions[vir].genome[0].key
-                  let lock = boid.genome.chromosome[gnum].lock
-                  let diff = Math.min( Math.abs(lock - key), 1 - Math.abs(lock - key))
-                  let probability = (1 - 2*diff)**specificity
-                  if (sim.rng.genrand_real1() < probability) {
-                    integration = true
-                    boid.genome.chromosome.splice(gnum, 1)
-                    boid.genome.phages.push(sim.environment.grid[x][y].virions[vir].genome)
-                    boid.genome.calculate_fitness()
-                    boid.susceptible = !!boid.genome.susceptible
-                  }
-                }
+      if (sim.environment.grid[x][y].virions.length > 0) {
+        shuffle(sim.environment.grid[x][y].virions)
+        for (let vir = 0; vir < sim.environment.grid[x][y].virions.length; vir++) {
+          if (sim.rng.genrand_real1() < infection_rate) {
+            let integration = false
+            shuffle(boid.genome.chromosome)
+            for (let gnum = 0; gnum < boid.genome.chromosome.length && !integration; gnum++) {
+              let key = sim.environment.grid[x][y].virions[vir].genome[0].key
+              let lock = boid.genome.chromosome[gnum].lock
+              let diff = 0
+              for (let aa = 0; aa < bit_string_length; aa++) diff += Math.abs(lock[aa]-key[aa])
+              let probability = (1 - diff/bit_string_length)**specificity
+              if (sim.rng.genrand_real1() < probability) {
+                integration = true
+                boid.genome.chromosome.splice(gnum, 1)
+                boid.genome.phages.push(sim.environment.grid[x][y].virions[vir].genome)
+                boid.genome.calculate_fitness()
               }
-              sim.environment.grid[x][y].virions.splice(vir, 1)
-              sim.environment.grid[x][y].density--
             }
+            sim.environment.grid[x][y].virions.splice(vir, 1)
           }
         }
       }
+
+
       // lysis
       shuffle(boid.genome.phages)
       for (let phg = 0; phg < boid.genome.phages.length; phg++) {
@@ -389,12 +378,6 @@ sim.flock.update = function() {
               else if (sim.environment.grid[x][y].X < X_half && boid.genome.chromosome[gnum].lowX_state == 1) repression = true
             }
           }
-          // for (let phg1 = 0; phg1 < boid.genome.phages.length && !repression; phg1++) for (let gnum = 0; gnum < boid.genome.phages[phg1].length && !repression; gnum++) {
-          //   if (boid.genome.phages[phg1][gnum].type == "R") {
-          //     if (sim.environment.grid[x][y].X >= X_half && boid.genome.phages[phg1][gnum].highX_state == 1) repression = true
-          //     else if (sim.environment.grid[x][y].X < X_half && boid.genome.phages[phg1][gnum].lowX_state == 1) repression = true
-          //   }
-          // }
           for (let gnum = 0; gnum < boid.genome.phages[phg].length && !repression; gnum++) {
             if (boid.genome.phages[phg][gnum].type == "R") {
               if (boid.X >= X_half && boid.genome.phages[phg][gnum].highX_state == 1) repression = true
@@ -405,12 +388,12 @@ sim.flock.update = function() {
             for (let offnum = 1; offnum < burst_size - vir_cost*boid.genome.phages[phg].length; offnum++){
               let new_virion = new Virion(false, boid.genome.phages[phg])
               sim.environment.grid[x][y].virions.push(new_virion)
-              sim.environment.grid[x][y].density++
             }
             death = true
           }
         }
       }
+
       // birth
       if (this.boids.length < max_cells && sim.rng.random() < boid.genome.fitness*boid.Y) {
         let newboid = this.copyBoid(boid);
@@ -418,7 +401,6 @@ sim.flock.update = function() {
         newboid.position.x += 0.5 * boid.size * Math.cos(angle);
         newboid.position.y += 0.5 * boid.size * Math.sin(angle);
         newboid.genome = boid.genome.copy()
-        newboid.susceptible = !!newboid.genome.susceptible
         newboid.X /= 2
         boid.X /= 2
         newboid.Y /= 2
@@ -426,8 +408,8 @@ sim.flock.update = function() {
         newboids.push(newboid);
 
       }
-      //death
 
+      //death
       if (sim.rng.genrand_real1() < d0 || death) {
         let idx = this.boids.indexOf(boid)
         this.boids.splice(idx, 1)
@@ -453,9 +435,60 @@ sim.environment.nextState = function(x, y) {
     else if (rnr < virion_decay_rate + virion_diffusion_rate) {
       let nbr = this.randomMoore8(this, x, y)
       nbr.virions.push(this.grid[x][y].virions[vir])
-      nbr.density++
       this.grid[x][y].virions.splice(vir, 1)
-      this.grid[x][y].density--
+    }
+  }
+}
+
+sim.environment.update = function() {
+
+  if (sim.rng.genrand_real1() < bacteria_influx_rate) {
+    let angle = this.random() * 2 * Math.PI
+    let new_boid = {
+            position: { x: sim.rng.genrand_real1()*sim.nrow , y: sim.rng.genrand_real1()*sim.ncol },
+            velocity: { x: sim.flock.init_velocity*Math.cos(angle) * sim.flock.max_speed, y: sim.flock.init_velocity*Math.sin(angle) * sim.flock.max_speed },
+            acceleration: { x: 0, y: 0 },
+            size: sim.flock.config.size
+    }
+    new_boid.genome = new Genome()
+    new_boid.X = 0.0
+    new_boid.Y = 0.0
+    sim.flock.boids.push(new_boid)
+  }
+
+  if (sim.rng.genrand_real1() < virion_influx_rate) {
+    let x = sim.rng.genrand_int(0, sim.nrow - 1)
+    let y = sim.rng.genrand_int(0, sim.ncol - 1)
+    this.grid[x][y].virions.push(new Virion(true))
+  }
+
+  this.asynchronous()
+  let num_prophages = 0
+  let avg_lysis = 0
+  let num_Ls = 0
+  for (let boid of sim.flock.boids) {
+    num_prophages = num_prophages + boid.genome.phages.length
+    for (let phg = 0; phg < boid.genome.phages.length; phg++) for (let gnum = 0; gnum < boid.genome.phages[phg].length; gnum++) {
+      if (boid.genome.phages[phg][gnum].type == "L") {
+        num_Ls++
+        avg_lysis += boid.genome.phages[phg][gnum].lysis
+      }
+    }
+  }
+
+  let num_virions = 0
+  for (let x = 0; x < sim.ncol; x++) {
+    for (let y = 0; y < sim.nrow; y++) {
+      this.grid[x][y].density = this.grid[x][y].virions.length
+      num_virions += this.grid[x][y].virions.length
+    }
+  }
+
+  if (sim.time%1000 == 1) {
+    if (sim.flock.boids.length > 0) {
+      shuffle(sim.flock.boids)
+      for (let ind = 0; ind < Math.min(sim.flock.boids.length, 100); ind++) sim.write_append(JSON.stringify(sim.flock.boids[ind].position) + '\t' + JSON.stringify(sim.flock.boids[ind].genome.chromosome) + '\t' + JSON.stringify(sim.flock.boids[ind].genome.phages) + '\n', 'test_data/VD'+VD+'iter'+iter+'time'+sim.time+'.dat')
+      sim.write_append(sim.time + '\t' + sim.flock.boids.length + '\t' + avg_lysis + '\t' + num_prophages + '\t' + num_virions + '\n', 'test_data/timeseries_VD'+VD+'iter'+iter+'.dat')
     }
   }
 }
@@ -471,7 +504,6 @@ sim.environment.update = function() {
             size: sim.flock.config.size
     }
     new_boid.genome = new Genome()
-    new_boid.susceptible = !!new_boid.genome.susceptible
     new_boid.X = 0.0
     new_boid.Y = 0.0
     sim.flock.boids.push(new_boid)
